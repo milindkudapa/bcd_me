@@ -18,8 +18,11 @@ source ~/.bashrc
 # regionmask/cartopy download Natural Earth shapefiles; cluster SSL needs certifi
 export SSL_CERT_FILE=$(/burg-archive/home/mck2199/summer/.venv312/bin/python -c 'import certifi; print(certifi.where())')
 
+# notebook to run: `sbatch run_ks_blockperm.sbatch <notebook.ipynb>`
+NB=${1:-ks_path_independence_ramip_multi.ipynb}
+
 /burg-archive/home/mck2199/summer/.venv312/bin/jupyter nbconvert \
   --to notebook --execute --inplace \
   --ExecutePreprocessor.kernel_name=summer \
   --ExecutePreprocessor.timeout=28800 \
-  ks_path_independence_ramip_multi.ipynb
+  "$NB"
