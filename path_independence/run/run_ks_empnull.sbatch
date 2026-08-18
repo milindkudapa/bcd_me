@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --account=glab
-#SBATCH --job-name=ks_pathindep
-#SBATCH --output=/burg-archive/home/mck2199/summer/bcd_me/path_independence/ks_%j.log
-#SBATCH --time=02:00:00
+#SBATCH --job-name=ks_empnull
+#SBATCH --output=/burg-archive/home/mck2199/summer/bcd_me/path_independence/logs/ks_empnull_%j.log
+#SBATCH --time=04:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
@@ -20,8 +20,16 @@ export SSL_CERT_FILE=$(/burg-archive/home/mck2199/summer/.venv312/bin/python -c 
 
 export KS_NWORKERS=${SLURM_CPUS_PER_TASK:-16}
 
+# 1) empirical-null analysis (new)
 /burg-archive/home/mck2199/summer/.venv312/bin/jupyter nbconvert \
   --to notebook --execute --inplace \
   --ExecutePreprocessor.kernel_name=summer \
-  --ExecutePreprocessor.timeout=7200 \
-  ks_path_independence_maps.ipynb
+  --ExecutePreprocessor.timeout=12600 \
+  earlier/ks_empirical_null.ipynb
+
+# 2) re-render the pairwise figure with authors' cmap_mod (loads cache, no recompute)
+/burg-archive/home/mck2199/summer/.venv312/bin/jupyter nbconvert \
+  --to notebook --execute --inplace \
+  --ExecutePreprocessor.kernel_name=summer \
+  --ExecutePreprocessor.timeout=3600 \
+  earlier/ks_path_independence_maps.ipynb

@@ -1,0 +1,6 @@
+logs/
+__pycache__/
+.ipynb_checkpoints/
+
+# advisor's sample code, lives in their repo — local reference only
+reference/
