@@ -192,6 +192,17 @@ Figures land in `summer_data/figures/` as `summary_fig{1..4}_*.png` plus the per
   Pairs are now formed within a `p<n>f<n>` variant and the notebook asserts on mismatch. Any new
   cross-experiment comparison needs the same check; same-run comparisons (scenario pairs, RAMIP)
   are immune by construction.
+- **RAMIP MIROC6 is not CMIP6 MIROC6.** The deela RAMIP `ssp370` members `r1`–`r3` share ids with
+  the CMIP6 ScenarioMIP runs on pangeo but are different simulations (monthly fields differ by
+  3.4 K rms, GMST series correlate 0.988), and different *configurations*: the 86-yr climatology
+  differs systematically — Arctic (70–90N) **+5 K**, Southern Ocean **−1.2 K**, 1.4 K rms — with
+  the same pattern in r1 and r2, while realization noise (r1 vs r2 within one archive) is ~0.
+  The deela files also carry a 360-day calendar (MIROC6 is Gregorian). Consequence: any
+  RAMIP-vs-ScenarioMIP comparison must exclude MIROC6 (it rejected 52% of land against `ssp585`
+  at matched GWL while six other models sat at the floor). Within-archive comparisons — RAMIP
+  arms against RAMIP `ssp370`, ScenarioMIP pairs, overshoot — are unaffected. Other RAMIP models
+  may be re-runs too (MRI's `r101…` ids are), so cross-archive pairing is always by variant and
+  always read against this caveat.
 - **Land masks.** Caching a land mask by grid *shape* — or by coordinates rounded to a few
   decimals — hands one model another model's mask, after which `xr.where()` aligns strictly,
   empties the array, and the land fraction reads exactly **0.000** with no error. Use

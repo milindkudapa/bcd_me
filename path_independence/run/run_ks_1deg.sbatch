@@ -17,8 +17,12 @@ export SSL_CERT_FILE=$(/burg-archive/home/mck2199/summer/.venv312/bin/python -c 
 export LD_LIBRARY_PATH=/burg-archive/home/mck2199/summer/.esmf/lib:$LD_LIBRARY_PATH
 export ESMFMKFILE=/burg-archive/home/mck2199/summer/.esmf/lib/esmf.mk
 
+# Notebook to run: `sbatch run/run_ks_1deg.sbatch <notebook.ipynb>` (default: the 1deg pipeline)
+NB=${1:-pipeline/ks_gwl_1deg.ipynb}
+echo "running $NB"
+
 /burg-archive/home/mck2199/summer/.venv312/bin/jupyter nbconvert \
   --to notebook --execute --inplace \
   --ExecutePreprocessor.kernel_name=summer \
   --ExecutePreprocessor.timeout=86400 \
-  pipeline/ks_gwl_1deg.ipynb
+  "$NB"

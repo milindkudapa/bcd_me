@@ -248,11 +248,15 @@ def demo():
     fa, fb = land_fraction(a, 'run'), land_fraction(b, 'run')
     assert 0.02 < fa < 0.08 and 0.02 < fb < 0.08, (fa, fb)
     assert len(_LAND) == 2, 'near-identical grids collided in the mask cache'
+    # FDR: 20 pixels tied at the permutation floor among 980 nulls must all be kept (the old
+    # strict `<` against p_fdr dropped them), and NaN (ocean) must stay NaN
+    p = np.r_[np.full(20, 1 / (NDRAWS + 1)), rng.uniform(0.2, 1, 978), np.nan, np.nan]
+    da = xr.DataArray(p.reshape(1, 20, 50), dims=('pair', 'lat', 'lon'),
+                      coords={'lat': np.arange(20.), 'lon': np.arange(50.)})
+    sig = sig_fdr(da).values.ravel()
+    assert (sig[:20] == 1).all() and (sig[20:-2] == 0).all() and np.isnan(sig[-2:]).all()
     print('ks_tools demo OK')
 
-
-if __name__ == '__main__':
-    demo()
 
 
 def sig_fdr(ps, FDR=0.2):
@@ -281,26 +285,23 @@ def sig_fdr(ps, FDR=0.2):
     if type(ps) != xr.core.dataarray.DataArray:
         raise TypeError('`ps` must be an xarray DataArray.')
 
-    # stack geographic variables into one
-    ps_stack = ps.stack(loc=('lat','lon'))
+    # Benjamini-Hochberg step-up as in Wilks (2016), eq. 3: p_fdr = max{p(i): p(i) <= (i/N) a_fdr}
+    # with i the position in the sorted non-NaN p and N their count; significant where p <= p_fdr.
+    # Both comparisons must be <=: the upstream version used <, which drops the p_fdr pixel itself
+    # and, with permutation p-values tied at the floor 1/(NDRAWS+1), can drop every true signal.
+    def _bh(p, fdr):
+        ok = ~np.isnan(p)
+        s = np.sort(p[ok])
+        hit = np.nonzero(s <= fdr * np.arange(1, s.size + 1) / s.size)[0]
+        out = np.where(ok, 0.0, np.nan)
+        if hit.size:
+            out[ok] = p[ok] <= s[hit[-1]]
+        return out
 
-    # calculate (i/N)*a_fdr, where i is the rank, N is the
-    # number of pixels (highest rank gets it; otherwise would
-    # be a count of non-nans, which might be faster but uglier),
-    # and a_fdr is the significance marker
-    sigLevel = (ps_stack.rank('loc')/ps_stack.rank('loc').max('loc'))*FDR
-
-    # significant pixels are those where
-    # p < p_fdr = max{p(i):p(i) < (i/N)a_fdr}
-    sigTests = ps_stack < ps_stack.where(ps_stack < sigLevel).max('loc')
-
-    # restore nans, which are removed through the <
-    sigTests = sigTests.where(~np.isnan(ps_stack))
-
-    # unstack and return
-    sigTests = sigTests.unstack()
-
-    return sigTests
+    ps_stack = ps.stack(loc=('lat', 'lon'))
+    sigTests = xr.apply_ufunc(_bh, ps_stack, FDR, input_core_dims=[['loc'], []],
+                              output_core_dims=[['loc']], vectorize=True)
+    return sigTests.unstack().transpose(*ps.dims)
 
 
 def fdr_land_fraction(ds, dim, fdr=0.2, var='p_blockperm'):
@@ -313,3 +314,70 @@ def fdr_land_fraction(ds, dim, fdr=0.2, var='p_blockperm'):
     p = ds[var].where(xr.DataArray(land, coords={'lat': ds.lat, 'lon': ds.lon}))
     sig = sig_fdr(p, FDR=fdr)
     return float((sig == 1).sum(('lat', 'lon')).mean(dim) / land.sum())
+
+
+# ----------------------------------------------------------------------------------------------
+# Common-grid pipeline (from pipeline/ks_gwl_1deg.ipynb): transform on the native grid first,
+# regrid last, then test. xesmf is imported lazily so the rest of this module works without ESMF.
+# ----------------------------------------------------------------------------------------------
+GRID_OUT = {'lat': np.arange(-89.5, 90, 1.0),  'lon': np.arange(0.5, 360, 1.0),
+            'lat_b': np.arange(-90., 91, 1.0), 'lon_b': np.arange(0., 361, 1.0)}
+NLAT, NLON = 180, 360
+B1, B2 = 0.0127, -0.0005      # Burke, Hsiang & Miguel (2015)
+
+
+def burke_growth(t_k):
+    """annual GDP-per-capita growth response to temperature in K (applied monthly here)"""
+    t = t_k - 273.15
+    return B1 * t + B2 * t ** 2
+
+
+SRC_VAR = {'gdp': 'tas'}
+TRANSFORM = {'gdp': burke_growth}
+METHOD = {'pr': 'conservative'}          # everything else bilinear
+
+
+def _bounds(c):
+    return np.concatenate([[c[0] - (c[1] - c[0]) / 2], (c[:-1] + c[1:]) / 2,
+                           [c[-1] + (c[-1] - c[-2]) / 2]])
+
+
+_RG = {}
+
+
+def regridder(lat, lon, method):
+    """one xe.Regridder per (exact source grid, method); keyed on coordinate bytes like land_mask"""
+    key = (np.asarray(lat).tobytes(), np.asarray(lon).tobytes(), method)
+    if key not in _RG:
+        import xesmf as xe
+        src = {'lat': lat, 'lon': lon,
+               'lat_b': np.clip(_bounds(lat), -90, 90), 'lon_b': _bounds(lon)}
+        # xesmf rejects `periodic` for conservative; the bounds close the globe there
+        _RG[key] = xe.Regridder(src, GRID_OUT, method, periodic=(method == 'bilinear'))
+    return _RG[key]
+
+
+def window_da(fn, var, y_end, win=WIN):
+    """monthly field over the `win` years ending at y_end, loaded (lat/lon never dask-chunked)"""
+    ds = xr.open_zarr(fn, consolidated=False)
+    yr = ds.time.dt.year
+    return ds[var].sel(time=(yr > y_end - win) & (yr <= y_end)).load()
+
+
+def pair_ks_1deg(fn_a, fn_b, var, end_a, end_b, win=WIN):
+    """transform (native grid) -> regrid to 1deg -> KS. None if a window is short."""
+    sides = []
+    for fn, end in [(fn_a, end_a), (fn_b, end_b)]:
+        da = window_da(fn, SRC_VAR.get(var, var), int(end), win)
+        if da.sizes['time'] != 12 * win:
+            return None
+        if var in TRANSFORM:
+            da = TRANSFORM[var](da)
+        v = regridder(da.lat.values, da.lon.values, METHOD.get(var, 'bilinear'))(da)
+        sides.append(v.transpose('lat', 'lon', 'time').values.reshape(-1, v.sizes['time']))
+    A, B = sides
+    return (block_perm_map(A, B).reshape(NLAT, NLON), ks_fast(A, B).reshape(NLAT, NLON))
+
+
+if __name__ == '__main__':
+    demo()
