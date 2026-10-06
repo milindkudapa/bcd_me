@@ -25,7 +25,7 @@ The validation adds four findings that change how rows 1–4 should be read:
 
 The defensible statement is: at a fixed global warming level, pathway differences of the RAMIP and ScenarioMIP kind leave local monthly climate indistinguishable at the pixel level and shift regional means by at most about 0.2 K and 4 %, with the largest and most consistent effects inside the region whose emissions changed; overshoot is the one pathway difference the pixel test sees directly.
 
-![Every comparison on one scale: land fraction rejecting at GWL 2.0 for the three original families against the 0.057 floor; aerosol pathway by variable; GISS-E2-1-G rejection maps for the aerosol pathway and for overshoot](../../summer_data/figures/story_fig3_result.png)
+![Every comparison on one scale: land fraction rejecting at GWL 2.0 for the three original families against the 0.057 floor; aerosol pathway by variable; GISS-E2-1-G rejection maps for the aerosol pathway and for overshoot](figures/story_fig3_result.png)
 
 All numbers in this document come from the cached outputs under `summer_data/aux/` and the audit outputs in `bcd_me/path_independence/method/audit/out/`; the Reproduction section says how to regenerate each one.
 
@@ -236,7 +236,7 @@ At the same global temperature, removing all anthropogenic aerosol emissions to 
 
 The mean response is not zero, it is small: the multi-model mean `tas` difference at matched 2 °C per AR6 region runs from −0.71 K (East Antarctica) to +0.26 K (northern Europe), with the cleanup warming the northern mid- and high latitudes and East Asia relative to the uncleaned pathway (`summary/table5_regional_response.csv`; the global-land row of that table is a known bad value, see Caveats). The validation section quantifies this: +0.22 K inside the East-Asia box and +0.05 K over land as a whole, below what one pair of 10-year windows can detect.
 
-![Multi-model mean temperature difference at matched GWL 2.0 (hatched where fewer than 6 of 8 models agree on sign) and the per-cell fraction of runs rejecting, tas](../../summer_data/figures/summary_fig4_panel.png)
+![Multi-model mean temperature difference at matched GWL 2.0 (hatched where fewer than 6 of 8 models agree on sign) and the per-cell fraction of runs rejecting, tas](figures/summary_fig4_panel.png)
 
 ## Experiment 2 — East-Asia-only cleanup (ssp370 vs ssp370-EAS126aer)
 
@@ -273,7 +273,7 @@ The remaining RAMIP arms behave like East Asia: nothing above the floor globally
 
 **Against ssp585** (6, 5, 1, 6, 6, 1, 2 models for EAS, SAS, ASIA, AFR, NAE, SAF-ca, SAS-ca) the global fractions are 0.028–0.065 raw and ≤ 0.005 FDR, and the local signals weaken: in-box FDR 0.001 for EAS, 0.008 for SAS, 0.012 for AFR. Two reasons: fewer pairs (≤ 25), and SSP5 assumes strong air-quality controls, so at 2 °C `ssp585`'s regional aerosol burden is likely closer to the cleaned arm's than `ssp370`'s is. SAS-ca vs ssp585 shows an in-box FDR of 0.15–0.19, but it is a single CNRM-ESM2-1 pair and not evidence.
 
-![In-box test for every arm: raw rejection rate inside the emission box (bars, dots = models) against land outside the box (solid) and the same-forcing null for that box and grid (dashed); bottom row the in-box FDR fraction](../../summer_data/figures/ks_regional_arms_inbox.png)
+![In-box test for every arm: raw rejection rate inside the emission box (bars, dots = models) against land outside the box (solid) and the same-forcing null for that box and grid (dashed); bottom row the in-box FDR fraction](figures/ks_regional_arms_inbox.png)
 
 Two features of the maps (`ks_regional_arms_fracmaps_{tas,pr,gdp}.png`) are not pathway signals: the dark subpolar North Atlantic and Southern Ocean patches are the test's own ocean false-positive rate (0.06–0.10 for same-forcing pairs), and a dark patch over the Congo basin appears in every `ssp585` map, so it belongs to the `ssp585` runs and has not been traced.
 
@@ -398,7 +398,7 @@ And the same per-cell test with the whole ensemble pooled on each side (7–10 m
 
 With the ensemble pooled, 40–50 % of the cleanup box rejects and 47–69 % of it passes FDR, against ≤ 11 % and 0 for the pooled null; outside the box 8–12 % of land rejects against 2–4 %. The single-pair design used in every result table sees 4–7 % in the same box. The regional cleanups are therefore clearly distinguishable from their parent at 2 °C once the test is given the whole ensemble; the pixel-level "indistinguishable" was a sample-size statement.
 
-![Audit figure: (a, b) power of the per-cell test for imposed shifts in tas and pr with the measured in-box effects shaded; (c, d) in-box response per model against the year its matched 2 °C decade ends, dashed = year-matched 2041–2050 mean; (e, f) box-mean series test per arm against its null](../../summer_data/figures/ks_regional_arms_audit.png)
+![Audit figure: (a, b) power of the per-cell test for imposed shifts in tas and pr with the measured in-box effects shaded; (c, d) in-box response per model against the year its matched 2 °C decade ends, dashed = year-matched 2041–2050 mean; (e, f) box-mean series test per arm against its null](figures/ks_regional_arms_audit.png)
 
 ## Reproduction
 
