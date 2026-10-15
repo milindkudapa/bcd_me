@@ -7,11 +7,11 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=32
 #SBATCH --mem=32G
-#SBATCH --array=0-11
+#SBATCH --array=0-13
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=mck2199@columbia.edu
 
-# One array task per (regional arm, anchor) of regional/ks_regional_arms.ipynb: 6 arms x 2 anchors.
+# One array task per (regional arm, anchor) of regional/ks_regional_arms.ipynb: 7 arms x 2 anchors.
 # Each task executes its own copy of the notebook into logs/ and writes only its own caches.
 # The combined tables come from one more run with FINAL=1 (all caches load, nothing recomputed):
 #   jid=$(sbatch --parsable run/run_regional_arms_array.sbatch)
@@ -30,7 +30,7 @@ if [ -n "$FINAL" ]; then
   unset ARM ANCHOR
   NAME=all
 else
-  ARMS=(sas afr nae asia safca sasca)
+  ARMS=(eas sas afr nae asia safca sasca)
   ANCHORS=(370 585)
   export ARM=${ARMS[$((SLURM_ARRAY_TASK_ID / 2))]}
   export ANCHOR=${ANCHORS[$((SLURM_ARRAY_TASK_ID % 2))]}

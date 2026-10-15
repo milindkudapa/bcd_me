@@ -1,7 +1,7 @@
 import os, numpy as np, pandas as pd, matplotlib
 matplotlib.use('Agg'); import matplotlib.pyplot as plt
 T = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out') + '/'
-FIG = '/burg-archive/home/mck2199/summer/summer_data/figures/ks_regional_arms_audit.png'
+FIG = '/burg-archive/home/mck2199/summer/summer_data/figures/audit/ks_regional_arms_audit.png'
 pw = pd.read_csv(T + 'power.csv'); ef = pd.read_csv(T + 'effects.csv'); ym = pd.read_csv(T + 'effects_ym.csv'); ea = pd.read_csv(T + 'effects_eas.csv')
 bs = pd.read_csv(T + 'boxseries.csv'); bn = pd.read_csv(T + 'boxseries_null.csv')
 if os.path.exists(T + 'boxseries_eas.csv'): bs = pd.concat([bs, pd.read_csv(T + 'boxseries_eas.csv')])

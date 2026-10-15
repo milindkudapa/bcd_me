@@ -88,7 +88,21 @@ and the rest is NaN. That is structure, not corruption. Count with `.notnull()`,
   parent `CanESM5` — a 0.1 K baseline error moves a crossing year by a few years.
 - `CanESM5` (not `CanESM5-1`) is what the ScenarioMIP collection contains.
 - `EC-Earth3-AerChem` has **no ScenarioMIP data at all** — it is an AerChemMIP-only `source_id`.
-- ScenarioMIP `tasmax`/`tasmin` were never downloaded, so those variables are RAMIP-only.
+- ScenarioMIP `tasmax`/`tasmin` exist on disk for `ssp585` only (`run/run_download_ssp585_tmax.sbatch`:
+  CanESM5 10 members, CNRM-ESM2-1 and UKESM1-0-LL 5, GISS-E2-1-G 6, CESM2 3, MRI-ESM2-0 2, NorESM2-LM none),
+  so the regional-arm comparisons against `ssp585` carry fewer pairs for those variables; the zarr's
+  `regional` group stays `tas`/`pr`-only for ScenarioMIP.
+
+Three more groups follow the same conventions:
+
+| group | written by | variables | dims |
+|---|---|---|---|
+| `ks_vs_ssp585` | `regional/ks_regional_vs_ssp585.ipynb` | `p_blockperm`, `pair_id` — `ssp585` vs `ssp370-EAS126aer` and `ssp370-126aer` | comparison 2 × var 3 × model 7 × pair 10 × lat × lon |
+| `ks_regional_arms` | `regional/ks_regional_arms.ipynb` (FINAL pass) | `p_blockperm`, `pair_id` — the seven regional arms vs own parent (`370`) and vs `ssp585` (`585`), six variables | anchor 2 × arm 7 × var 6 × model 10 × pair 10 × lat × lon (11 GB dense; NaN where a combination does not exist; written cache by cache with region writes) |
+| `burke_country` | `pipeline/ramip_impacts_gdp_country.ipynb` | `dT`, `dg`, `dg_pop2030`, `p`, `run_id`; country coords `name`, `gdp_pc`, `gdp`, `pop_wb` | arm 8 × model 9 × pair 10 × country 228 |
+
+The seasonal maps stay as netCDF (`diagnostics/regional_arms_seasonal/`): four seasons would make
+the group 45 GB dense.
 
 ### Examples
 
@@ -117,8 +131,14 @@ reg.tas.sel(model='MIROC6', region=reg.region.values[sas], exp=['ssp370', 'ssp37
 | `scenariomip_availability.csv`, `scenariomip_inventory.csv` | what pangeo offered vs what landed on disk |
 | `regional/{var}_{model}.nc` | RAMIP AR6-regional annual means, 36 files, dims exp×run×year×region |
 | `regional_scenariomip/{var}_{model}.nc` | same for ScenarioMIP, 16 files (tas + pr only) |
+| `population_1deg.nc` | GHS-POP R2023A (JRC) 2020 and 2030 population summed to the 1° grid (`pop2020`, `pop2030`; 7.84 and 8.55 billion) |
+| `worldbank_gdp_pop.csv` | World Bank GDP per capita and GDP (constant 2015 US$) and population per ISO3, 2019 (else latest 2015–2022) |
 
-Prefer the zarr; these are kept because they are what the store is verified against.
+Prefer the zarr; these are kept because they are what the store is verified against. The two
+economic inputs are written by `pipeline/ramip_impacts_gdp_country.ipynb`; their sources sit in
+`raw/population/` (the GHS-POP 30-arcsec zips and GeoTIFFs, 1 GB, and the Natural Earth 50 m
+country shapefile). Burke, Hsiang & Miguel's replication package (their country-year panel, Stata and R
+scripts, CMIP5 country warming ratios) sits in `raw/burke2015/`; `gdp/burke.py` reads it.
 
 ---
 
@@ -144,21 +164,42 @@ and is kept only for comparison.
 | `ks_blockperm_enspairs/CanESM5-1.nc` | 45 same-forcing member pairs — the null calibration | pair×lat×lon |
 | `ramip_gwl/baseline_1850_1900.csv` | per-model pre-industrial GMST and its member spread |  |
 | `ramip_gwl/gwl2.0_windows.csv` | the windows the GWL2.0 analysis actually used |  |
-| `impacts/burke_gwl2.0.nc` | Burke GDP-growth response: `t_anchor`, `t_other`, `g_*`, `dt`, `dg` | model×run×lat×lon |
+| `impacts/burke_gwl2.0.nc` | Burke GDP-growth response per cell: `t_anchor`, `t_other`, `g_*`, `dt`, `dg` | model×run×lat×lon |
+| `impacts/burke_country_pairs.csv` | the same at country level (population-weighted country `tas` → Burke g): one row per comparison × model × pair × country with `dT`, `dg` (annual, growth units), `dg_pop2030`, KS `p` of the two monthly g(T) series | 82,764 rows |
+| `impacts/burke_country_null.csv` | same-forcing parent pairs of every model, per country: the country-level false-positive rate (0.047) | 68,400 rows |
+| `impacts/burke_country_summary.csv`, `_by_model.csv`, `_totals.csv` | per comparison × country: models, pairs, `dT`, `dg` ± sd, sign agreement, rejection fraction vs null, `dgdp_pc` (US$/person/yr), `dgdp` (US$/yr); world totals per arm with model spread |  |
+| `gdp/countries.csv`, `gdp/country_tas_{model}.nc` | the 228 countries (area-weighted flag) and the annual population-weighted country temperature (°C) of every RAMIP run from 2015 (`gdp/country_tas.py`; GHS-POP 2020 weights; NaN past a run's end) | series×year×country |
+| `gdp/burke_coef_{pooled,lag5,richpoor}.csv` | Burke, Hsiang & Miguel's regressions re-estimated from their panel (`gdp/burke.py`): draw 0 the point estimate, 1–1000 the country bootstrap |  |
+| `gdp/gdp_totals.csv`, `gdp_totals_by_model_draw.csv`, `gdp_country.csv`, `gdp_significance.csv`, `gdp_variants.csv` | the revisited matched-2 °C response (`gdp/ramip_gdp_burke.ipynb`): world totals per arm and specification with model sd, coefficient 5–95 % and the 10- and 30-year framings; per-country Δg, Z against the same-forcing spread and money; what each fix changed |  |
+| `gdp/pathway_summary.csv`, `pathway_by_model.csv`, `pathway_country_2050.csv` | the year-matched response compounded along the pathways (`gdp/ramip_gdp_pathway.ipynb`): GDP per capita relative to the parent by 2050 and at the run's end, its uniform-warming part, the GMST lead |  |
+| `regional_vs_ssp585/{eas,glob}_{var}_{model}.nc` | `ssp585` vs the East-Asia and global arms, 1°, `tas`/`pr`/`gdp`; `land_fractions_{eas,glob}.csv` | pair×lat×lon |
+| `regional_arms/{370,585}_{arm}_{var}_{model}.nc` | the seven regional arms (`eas`, `sas`, `afr`, `nae`, `asia`, `safca`, `sasca`) vs own `ssp370` parent (370) and vs `ssp585` (585), 1°, `tas`/`pr`/`gdp`/`tasmax`/`tasmin`/`dtr` (`dtr` = `tasmax − tasmin`); the East-Asia `tas`/`pr`/`gdp` maps are the `ks_1deg/eas_*` and `regional_vs_ssp585/eas_*` files above | pair×lat×lon |
+| `regional_arms/land_fractions_global.csv`, `land_fractions_box.csv`, `box_summary.csv` | global and in-emission-box land fractions (raw and FDR) per model and multi-model, with the in-box same-forcing null |  |
+| `regional_arms/null_1deg_{var}.nc` | 45 same-forcing CanESM5-1 pairs regridded to 1° exactly like the arms (`method/audit/null1deg.py`): the null for any 1° FDR comparison | pair×lat×lon |
+| `regional_arms_seasonal/{370,585}_{arm}_{var}_{model}.nc` | the same arms by season (DJF = Dec(y−1)–Feb(y), 3-month blocks, 30 months per side): `p_blockperm(season, pair, lat, lon)`, `d_box(season, pair)` (box-mean difference, K or % for `pr`), `p_pooled(season, lat, lon)` (all members concatenated, box cells only), `p_pooled_null` (anchor members split in halves) | season×pair×lat×lon |
+| `regional_arms_seasonal/null_1deg_seasonal_{var}.nc`, `seasonal_summary.csv`, `seasonal_by_model.csv` | seasonal same-forcing null per variable; per-season summaries (global and in-box raw/FDR vs null, `d_box`, pooled in-box rejection vs its null) |  |
 
 Test parameters, identical everywhere: 10-yr windows (n = 120 months), 12-month blocks, 999
-permutation draws, α = 0.05.
+permutation draws, α = 0.05; the seasonal files use 30 months per side in 3-month blocks.
 
 **The number that makes these interpretable:** the same test on 45 *same-forcing* CanESM5-1
 member pairs rejects on **0.057** of land. That is this test's false-positive floor. A land
 fraction at 0.057 means "indistinguishable", not "identical", and zero is not the null
 expectation. The Wilks (2016) FDR columns need no floor: `ks_tools.sig_fdr` controls the false
-discovery rate over the land field, so ~0 *is* the null expectation there — the aerosol and
-scenario families sit at ≤0.001, overshoot at 0.077.
+discovery rate over the land field, so ~0 *is* the null expectation there. Two things to know
+about it (details in `AUDIT.md` §3.5): the implementation used a strict `<` until 2026-10-05, and
+the FDR tables written before then (`ramip_gwl/land_fractions_1deg_fdr*.csv`,
+`wilks_fdr_families.csv`, `regional_vs_ssp585/land_fractions_*.csv`) have since been regenerated
+with the corrected test (global cleanup 0.0005 → 0.0022, scenario 0.0009 → 0.0012, overshoot
+0.077 → 0.078); and with 999 draws the step-up cannot flag fewer than 0.005·N cells (108 over 1° land), so
+"FDR ≈ 0" means "fewer than 108 land cells at the permutation floor". The per-model floor is
+0.035–0.062 (`method/audit/out/floors.csv`), and the per-cell test needs an imposed shift of about
+1 K (`tas`) or 25 % (`pr`) to reject half the land cells (`out/power.csv`); the in-box effect
+sizes behind the regional arms are 0.1–0.2 K and 2–4 % (`out/effects*.csv`).
 
-`ks_blockperm_ramip/`, `ks_ramip_multi/`, `ks_empirical_null/`, `ramip_regional_means/` and the
-loose `ks_pvals_*.nc` are outputs of earlier notebooks, kept for comparison against the
-year-matched analysis.
+`earlier/` holds the outputs of the superseded notebooks (`ks_blockperm_ramip/`, `ks_ramip_multi/`,
+`ks_empirical_null/`, `ramip_regional_means/`, the loose `ks_pvals_*.nc` and `gwl_test_*.nc`),
+kept for comparison against the year-matched analysis.
 
 ---
 
@@ -170,7 +211,27 @@ year-matched analysis.
 `table4_families.csv` (all three comparison families on one scale),
 `table5_regional_response.csv` (regional ΔT and Δpr at matched GWL).
 
-Figures land in `summer_data/figures/` as `summary_fig{1..4}_*.png` plus the per-analysis ones.
+Figures live in `summer_data/figures/`, one folder per experiment (the numbering of
+`TECHNICAL.md`); every notebook's `out_dir` points at its folder:
+
+| folder | written by | contents |
+|---|---|---|
+| `e0_foundation/` | `earlier/figure_ssps_gwls_local`, the Fig. 2 scripts | GWL time series and crossing years, BCD-ME Fig. 2 reproductions |
+| `e1_global_cleanup/` | `ks_path_independence_ramip_gwl`, `_vars`, `ks_gwl_1deg`, `ramip_data_layer` | `ssp370` vs `ssp370-126aer`: p-maps, land fractions by variable, windows, GMST, regional boxplots |
+| `e2_east_asia/` | `ks_gwl_1deg` | the `_eas` land-fraction and rejection-frequency figures |
+| `e3_regional_arms/` | `regional/ks_regional_arms`, `_seasonal` | land fractions, rejection maps per variable, in-box test; seasonal in-box, effect, pooled and regional map figures |
+| `e4_vs_ssp585/` | `regional/ks_regional_vs_ssp585` | ssp585 anchor figures and the MIROC6 diagnostics |
+| `e5_scenarios_overshoot/` | `ks_location_scenarios` | SSP pairs and overshoot |
+| `e7_gdp/` | `ramip_impacts_gdp`, `_country` | Burke response per cell and per country, top-20 bar chart |
+| `e8_gdp_burke/` | `gdp/ramip_gdp_burke`, `_pathway` | the revisited response: world totals per arm and specification, what each fix changed, country maps, top-20, the pathway time series and 2050 maps |
+| `method/` | `method/ks_block_permutation`, `ks_blockperm_diagnostics` | size checks, pixel diagnostics, ensemble pairs |
+| `audit/` | `method/audit/audit_fig.py` | power, effect size vs window year, box-mean test |
+| `summary/` | `ramip_summary`, `project_figure`, `story_figures`, `ks_gwl_1deg` | `summary_fig1–4`, `story_fig1–4`, `project_overview`, `ks_wilks_fdr_families` |
+| `earlier/` | `earlier/*` | year-matched RAMIP, empirical null, first p-value maps |
+
+`run/reorganize_outputs.py` and `run/patch_output_paths.py` are the scripts that created this
+layout (and re-pointed the notebooks); the four figures used by the written reports are also
+copied into the repository at `path_independence/figures/`.
 
 ---
 
@@ -212,10 +273,30 @@ Figures land in `summer_data/figures/` as `summary_fig{1..4}_*.png` plus the per
   the minimum, and the minimum of 10 uniform p-values averages ~0.09 under a true null, so those
   maps look dark everywhere. Report land fractions, or the per-pixel fraction of runs rejecting
   (fixed null expectation 0.05 at any N).
-- **Burke impacts are differences, not levels.** Country-level coefficients applied per pixel,
-  no population weighting, no bias correction, no reanalysis-uncertainty sampling — which
-  Schwarzwald et al. find is the *largest* term in absolute damages. The arm-to-arm difference is
-  meaningful; the damage level is not.
+- **Burke impacts are differences, not levels.** Per cell (`burke_gwl2.0.nc`): country-level
+  coefficients applied per pixel, no population weighting, no bias correction, no
+  reanalysis-uncertainty sampling — which Schwarzwald et al. find is the *largest* term in absolute
+  damages. Per country (`burke_country_*`): population-weighted country temperature (GHS-POP 2020;
+  2030 changes Δg by 4 × 10⁻⁶), Burke's pooled no-lag specification on annual means, and money
+  values that are a one-year growth-rate response at today's economy (World Bank 2019, constant
+  2015 US$), not compounded and without adaptation; 23 territories without World Bank GDP carry
+  Δg but no money. In both, the arm-to-arm difference is meaningful; the damage level is not. Both are superseded by `gdp/` (TECHNICAL.md, Experiment 7c): the rounded
+  coefficients steepened the response above 13 °C by about 20 %, each model's raw temperature level
+  set the slope although the models disagree by 3–10 K per country, Burke's own uncertainty was
+  missing, and the KS test on monthly g(T) was the wrong test. With his exact coefficients, his
+  bootstrap and observation-anchored levels the global cleanup is −35 ± 22 bn US$ per year of growth
+  at matched 2 °C (coefficient range −78 to +12), and along the actual pathway −3.4 % of GDP per
+  capita by 2050, three quarters of it the cleanup's extra global warming.
+- **The per-cell test is a detection limit, not a demonstration of independence.** One pair of
+  10-year windows rejects half the land cells only for a shift of about 1 K (`tas`) or 25 % (`pr`);
+  the regional cleanups move in-box means by ≤ 0.25 K and ≤ 4 %. The pooled-ensemble and box-mean
+  tests (`method/audit/`, `regional_arms_seasonal/`) do detect them. GWL matching also tests hot
+  models before the aerosol pathways have separated (CanESM5-1's matched decade ends in 2027) and
+  cool models after (MIROC6, 2065), so multi-model means mix the two. `AUDIT.md` has the numbers.
+- **Diurnal range against `ssp585` is a cross-archive signal.** `dtr` is the one variable above
+  the floor over global land in every arm vs `ssp585` (raw 0.07–0.09, FDR up to 0.02), carried by
+  CNRM-ESM2-1 and GISS-E2-1-G and identical across arms: a difference between the ScenarioMIP
+  `ssp585` runs and the RAMIP `ssp370` family, not an arm effect; read it with the MIROC6 caveat.
 - **Sample sizes are small in places.** CNRM-ESM2-1 and EC-Earth3-AerChem carry 6 matched runs,
   CESM2's ScenarioMIP entry has 3 members, several overshoot comparisons have n = 1, and the
   multi-GWL RAMIP comparisons are capped at 5 runs (the cap is printed, never silent). Check
@@ -232,11 +313,20 @@ login node**:
 sbatch run/run_ks_blockperm.sbatch pipeline/<notebook>.ipynb
 ```
 
-Order from scratch: `ramip_data_layer` → `scenariomip_download` →
-`ks_path_independence_ramip_gwl` → `ks_path_independence_ramip_gwl_vars` →
-`ks_location_scenarios` → `ramip_impacts_gdp` → `build_data_product` → `ks_gwl_1deg`
-(via `run/run_ks_1deg.sbatch`; needs the ESMF env from `run/build_esmf_env.sbatch` once) →
-`ramip_summary`.
+Order from scratch: `ks_path_independence_ramip_gwl` (writes the baseline and windows everything
+else reads) → `ramip_data_layer` → `ks_path_independence_ramip_gwl_vars` → `ramip_impacts_gdp` →
+`scenariomip_download` (plus `run/run_download_ssp585_tmax.sbatch` for the ssp585 `tasmax`/`tasmin`)
+→ `ks_location_scenarios` → `build_data_product` → `ks_gwl_1deg` (via `run/run_ks_1deg.sbatch`;
+needs the ESMF env from `run/build_esmf_env.sbatch` once) → `ramip_summary`, `project_figure`,
+`story_figures`. Then the regional work: `regional/ks_regional_vs_ssp585` (1deg runner, give the
+folder), the 1° nulls (`sbatch --export=ALL,NULL_VARS=tas:pr:gdp:tasmax:tasmin:dtr run/run_py.sbatch
+method/audit/null1deg.py`, and with `NULL_SEASONAL=1` for the seasonal ones; lists use `:` because
+`sbatch --export` splits on commas), `run/run_regional_arms_array.sbatch` and
+`run/run_regional_arms_seasonal_array.sbatch` (array first, then `--array=0 --export=ALL,FINAL=1`
+with `--dependency=afterok` on the array and the null job), `pipeline/ramip_impacts_gdp_country`
+(1deg runner), and the audit scripts in `method/audit/`. The GDP revisit is separate:
+`sbatch --array=0-8 gdp/run_gdp.sbatch`, then `--export=ALL,STAGE=nb` (needs `raw/burke2015/`; see
+`gdp/README.md`). `TECHNICAL.md` lists the same steps with runtimes.
 
 Two environment notes: burg needs `export SSL_CERT_FILE=$(python -c 'import certifi;
 print(certifi.where())')` for Natural Earth downloads (already in the sbatch), and writing a

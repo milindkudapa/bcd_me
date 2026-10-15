@@ -332,9 +332,21 @@ def burke_growth(t_k):
     return B1 * t + B2 * t ** 2
 
 
-SRC_VAR = {'gdp': 'tas'}
+SRC_VAR = {'gdp': 'tas', 'dtr': 'tasmax'}
 TRANSFORM = {'gdp': burke_growth}
 METHOD = {'pr': 'conservative'}          # everything else bilinear
+# derived from two source fields: var -> (second source variable, function of (first, second))
+DERIVED = {'dtr': ('tasmin', lambda a, b: a - b)}      # diurnal temperature range, K
+SEASONS = ('DJF', 'MAM', 'JJA', 'SON')
+
+
+def sibling_file(fn, var):
+    """the same run's store for another variable (member_files naming); longest span if split"""
+    d, b = os.path.split(fn)
+    m = re.match(r'[A-Za-z0-9]+_Amon_(.+?_r\d+i\d+p\d+f\d+)_', b)
+    cands = sorted(glob.glob(f'{d}/{var}_Amon_{m.group(1)}_*.zarr'),
+                   key=lambda f: int(re.search(r'-(\d{4})\d*\.zarr$', f).group(1)))
+    return cands[-1] if cands else None
 
 
 def _bounds(c):
@@ -357,26 +369,67 @@ def regridder(lat, lon, method):
     return _RG[key]
 
 
-def window_da(fn, var, y_end, win=WIN):
-    """monthly field over the `win` years ending at y_end, loaded (lat/lon never dask-chunked)"""
+def window_da(fn, var, y_end, win=WIN, extra_dec=False):
+    """monthly field over the `win` years ending at y_end, loaded (lat/lon never dask-chunked).
+
+    extra_dec also takes the December before the window, so that DJF blocks can be contiguous.
+    """
     ds = xr.open_zarr(fn, consolidated=False)
-    yr = ds.time.dt.year
-    return ds[var].sel(time=(yr > y_end - win) & (yr <= y_end)).load()
+    yr, mon = ds.time.dt.year, ds.time.dt.month
+    keep = (yr > y_end - win) & (yr <= y_end)
+    if extra_dec:
+        keep = keep | ((yr == y_end - win) & (mon == 12))
+    return ds[var].sel(time=keep).load()
 
 
-def pair_ks_1deg(fn_a, fn_b, var, end_a, end_b, win=WIN):
-    """transform (native grid) -> regrid to 1deg -> KS. None if a window is short."""
-    sides = []
-    for fn, end in [(fn_a, end_a), (fn_b, end_b)]:
-        da = window_da(fn, SRC_VAR.get(var, var), int(end), win)
-        if da.sizes['time'] != 12 * win:
+def window_1deg(fn, var, end, win=WIN, extra_dec=False):
+    """native window -> derive/transform -> 1deg DataArray (time, lat, lon); None if a source is missing"""
+    da = window_da(fn, SRC_VAR.get(var, var), int(end), win, extra_dec)
+    if var in DERIVED:
+        other, f = DERIVED[var]
+        fn2 = sibling_file(fn, other)
+        if fn2 is None:
             return None
-        if var in TRANSFORM:
-            da = TRANSFORM[var](da)
-        v = regridder(da.lat.values, da.lon.values, METHOD.get(var, 'bilinear'))(da)
-        sides.append(v.transpose('lat', 'lon', 'time').values.reshape(-1, v.sizes['time']))
-    A, B = sides
-    return (block_perm_map(A, B).reshape(NLAT, NLON), ks_fast(A, B).reshape(NLAT, NLON))
+        da = f(da, window_da(fn2, other, int(end), win, extra_dec))
+    if var in TRANSFORM:
+        da = TRANSFORM[var](da)
+    return regridder(da.lat.values, da.lon.values, METHOD.get(var, 'bilinear'))(da)
+
+
+def season_values(da1, season, win=WIN):
+    """(cells, 3*win) for one season of a window_1deg array loaded with extra_dec; None if short"""
+    d = da1.sel(time=da1.time.dt.season == season)
+    if season == 'DJF':                            # Dec(y-1)-Jan(y)-Feb(y): drop the trailing December
+        d = d.isel(time=slice(None, -1))
+    if d.sizes['time'] != 3 * win:
+        return None
+    return d.transpose('lat', 'lon', 'time').values.reshape(-1, 3 * win)
+
+
+def _load_1deg(fn, var, end, win, season):
+    """(cells, time) on 1deg for the full window or one season; None if short or missing"""
+    v = window_1deg(fn, var, end, win, extra_dec=season is not None)
+    if v is None:
+        return None
+    if season is not None:
+        return season_values(v, season, win)
+    if v.sizes['time'] != 12 * win:
+        return None
+    return v.transpose('lat', 'lon', 'time').values.reshape(-1, 12 * win)
+
+
+def pair_ks_1deg(fn_a, fn_b, var, end_a, end_b, win=WIN, season=None):
+    """transform (native grid) -> regrid to 1deg -> KS. None if a window is short.
+
+    season='DJF'|'MAM'|'JJA'|'SON' tests that season's months only: 3 per year, 3-month blocks,
+    DJF taken as Dec(y-1)-Jan(y)-Feb(y). var='dtr' is tasmax - tasmin (DERIVED), fn naming tasmax.
+    """
+    A = _load_1deg(fn_a, var, end_a, win, season)
+    B = _load_1deg(fn_b, var, end_b, win, season)
+    if A is None or B is None:
+        return None
+    block = 3 if season else BLOCK
+    return (block_perm_map(A, B, block).reshape(NLAT, NLON), ks_fast(A, B).reshape(NLAT, NLON))
 
 
 if __name__ == '__main__':

@@ -13,8 +13,10 @@ figure `summer_data/figures/ks_regional_arms_audit.png`).
    job array were checked and reproduce. One real bug was found and fixed before the final run:
    `ks_tools.sig_fdr` used a strict `<` in the Benjamini–Hochberg step, which discards the pixel
    that sets the threshold and, with permutation p-values tied at the floor 1/1000, could discard
-   every significant pixel. Earlier FDR numbers (`ramip_gwl/land_fractions_1deg_fdr*.csv`) are
-   slightly low and should be regenerated.
+   every significant pixel. The earlier FDR tables (`ramip_gwl/land_fractions_1deg_fdr*.csv`,
+   `wilks_fdr_families.csv`, `regional_vs_ssp585/land_fractions_*.csv`) have since been regenerated
+   with the corrected test: global cleanup 0.0005 → 0.0022 (EC-Earth3-AerChem 0.012), scenario
+   0.0009 → 0.0012, overshoot 0.077 → 0.078, the ssp585 anchor 0.000/0.0003 → 0.0008/0.0013.
 2. **The headline result reproduces, but it is a detection limit, not a demonstration of
    independence.** Global land fractions sit at the 0.057 floor and FDR is ≈ 0 for every arm. The
    per-pixel test, however, needs an imposed shift of about **1 K** in monthly temperature (or
@@ -242,6 +244,11 @@ A KS test is invariant under monotone transformations. Burke's g(T) is monotone 
 0.87; the remaining differences are Monte-Carlo noise plus pixels whose monthly temperatures
 straddle the optimum). The README's "genuinely different test" holds only for those pixels. The
 `gdp` columns are fine to keep but should not be counted as a second variable.
+
+The money numbers themselves were audited afterwards (`gdp_check.py`, `out/gdp_check_*.csv`,
+`figures/audit/gdp_check.png`): rounded coefficients, each model's raw temperature level setting the
+slope, no Burke uncertainty, and a KS test that could not see the effect. They are redone in `gdp/`
+(TECHNICAL.md, Experiment 7c).
 
 ### 3.8 The ssp585 anchor
 

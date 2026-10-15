@@ -10,14 +10,20 @@ Data products and their schemas are documented separately in [DATA.md](DATA.md).
 ## Layout
 
 ```
-ks_tools.py     shared test kernels, GWL window pickers, land_fraction, Wilks FDR  (self-checking)
+ks_tools.py     shared test kernels, GWL window pickers, land_fraction, Wilks FDR, 1° pipeline,
+                derived variables (dtr) and seasonal windows  (self-checking)
 DATA.md         what every output file contains, and its caveats
-pipeline/       the current analysis chain
-method/         the test itself: construction and validation
+TECHNICAL.md    the technical report: summary, every experiment with its results, reproduction
+AUDIT.md        validation of the aerosol result: power, effect sizes, pooled tests
+pipeline/       the current analysis chain (incl. the country-level GDP response)
+regional/       the regional cleanup arms: vs ssp585, all seven arms with the in-box test, by season
+gdp/            the Burke GDP response revisited: his regressions and bootstrap, observation-anchored levels, the pathway experiment
+method/         the test itself: construction and validation; audit/ holds the audit scripts and outputs
 earlier/        superseded and prior-phase analyses, kept for comparison
 reference/      the advisor's sample code the KS kernel came from
-run/            slurm submission scripts
-logs/           slurm output (gitignored)
+run/            slurm submission scripts, the download of ssp585 tasmax/tasmin, the folder-layout scripts
+figures/        the four figures the reports embed (copies; the full set is in summer_data/figures/)
+logs/           slurm output and executed notebook copies (gitignored)
 dir_list.csv    symlink into ../code/ — get_params() reads it from the cwd
 ```
 
@@ -55,6 +61,24 @@ notebook lives in, because `get_params()` reads the `dir_list.csv` symlink here.
 | `ks_gwl_1deg.ipynb` | everything regridded to a common 1° grid (xESMF), `gdp` (Burke g(T)) as a fifth variable, the East-Asia-only cleanup arm, Wilks (2016) FDR field significance, and the zarr's `ks` group |
 | `ramip_summary.ipynb` | summary tables 1–5 and figures 1–4 |
 | `project_figure.ipynb`, `story_figures.ipynb` | the overview and four-figure project summaries |
+| `ramip_impacts_gdp_country.ipynb` | the Burke response at country level: GHS-POP population weights, World Bank GDP, Δg, ΔGDP per capita and ΔGDP per country, country-series KS |
+
+## regional/
+
+| notebook | produces |
+|---|---|
+| `ks_regional_vs_ssp585.ipynb` | `ssp585` vs the East-Asia and global arms (1deg runner); the MIROC6 diagnosis |
+| `ks_regional_arms.ipynb` | all seven arms vs own parent and vs ssp585, `tas`/`pr`/`gdp`/`tasmax`/`tasmin`/`dtr`, global and in-box, via `run/run_regional_arms_array.sbatch` |
+| `ks_regional_arms_seasonal.ipynb` | the same by season with the pooled in-box test, via `run/run_regional_arms_seasonal_array.sbatch` |
+
+## gdp/
+
+| file | produces |
+|---|---|
+| `burke.py` | Burke, Hsiang & Miguel's regressions re-estimated from their replication package (`python gdp/burke.py` self-checks against the paper) |
+| `country_tas.py` | annual population-weighted country temperature for every RAMIP run (array over models via `run_gdp.sbatch`) |
+| `ramip_gdp_burke.ipynb` | matched GWL 2.0 with the exact coefficients, Burke's 1000-draw bootstrap, observation-anchored levels and Δg tested against its own null |
+| `ramip_gdp_pathway.ipynb` | the same response year by year along the pathways, compounded to 2050 |
 
 ## method/
 
@@ -74,12 +98,24 @@ year-matched comparison that appeared to show large differences was mostly readi
 from aerosol cleanup reaching a given level ~6.5 years earlier.
 
 The same holds on a common 1° grid, for the Burke (2015) GDP-growth response `g(T)` as a fifth
-variable (0.054), and for East-Asia-only cleanup (0.043–0.049) — whose GMST barely moves (1.0 yr
-lead vs 5.6 yr for global cleanup), and whose local fingerprint over East Asia (~1.6× the global
-rejection frequency) still fails Wilks (2016) FDR field significance. Under that FDR test the
-aerosol and scenario families collapse to ≤0.001 of land with no floor argument needed.
+variable (0.054), and for every regional cleanup arm (East Asia, South Asia, Africa, North
+America/Europe, combined Asia, the carbonaceous-only arms; 0.039–0.065), against the own `ssp370`
+parent and against `ssp585`. Under the FDR test the aerosol and scenario families sit at ≤0.005 of
+land with no floor argument needed.
+
+What the per-cell test cannot see, the audit (`AUDIT.md`) and the regional notebooks measure
+directly: inside its own emission region a cleanup leaves a small, real fingerprint — East Asia
+and South Asia +0.1–0.2 K and +2–4 % precipitation at matched 2 °C, mostly in daytime maxima and
+the diurnal range, with a season (monsoon rain over South Asia in JJA, haze-season temperature
+along the Indo-Gangetic plain in DJF, year-round over eastern China) — detectable once the
+ensemble is pooled (40–50 % of the box rejects) or the box mean is tested, and worth about
+−35 ± 22 bn US$ per year of growth in Burke's framework for global cleanup (his coefficient
+uncertainty: −78 to +12 bn), because the cleaned world is warmer where people live; along the actual
+pathway, where the cleanup also warms the globe faster, the same framework gives −3.4 % of GDP per
+capita by 2050 (`gdp/`). One pair of 10-year windows needs a shift of ~1 K per cell to
+see any of this.
 
 Overshoot is the exception: the declining branch of `ssp534-over` differs from the rising branch
 at the same warming level on 9–18% of land in the models with real ensembles, survives the FDR
-test (0.077, driven by MRI-ESM2-0 and GISS at 2.0 K), and rests on few members — the one worth
+test (0.078, driven by MRI-ESM2-0 and GISS at 2.0 K), and rests on few members — the one worth
 pushing further. See the caveats in [DATA.md](DATA.md#5-caveats-that-change-conclusions).

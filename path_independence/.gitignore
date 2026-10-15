@@ -4,3 +4,6 @@ __pycache__/
 
 # advisor's sample code, lives in their repo — local reference only
 reference/
+
+# draft manuscript, kept out of the repository
+paper/
